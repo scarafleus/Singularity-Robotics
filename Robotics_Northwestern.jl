@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.12.17
+# v0.12.18
 
 using Markdown
 using InteractiveUtils
@@ -114,6 +114,9 @@ md"Computes the 4x4 dimensional transformation matrix from combining a rotation 
 # ╔═╡ 09009752-3f86-11eb-1e79-3f70a93d7575
 transformationMatrix(ω, θ, p) = transformationMatrix(rotationMatrix(ω, θ), p)
 
+# ╔═╡ cd531f2a-5044-11eb-132f-9d02777551c6
+md"Computes the inverse of a transformationMatrix `T` efficiently."
+
 # ╔═╡ c2826700-4d55-11eb-19cf-7b814acfca64
 md"Extracts the rotation matrix from a transformation matrix `T`."
 
@@ -125,6 +128,17 @@ md"Extracts the offset vector from a transformation matrix `T`."
 
 # ╔═╡ 1db602d0-42ac-11eb-0992-735dc410de36
 p(T) = T[1:3, 4]
+
+# ╔═╡ 2388d716-5044-11eb-1ec5-b516fa176961
+function inverseTransformationMatrix(T::Array{Float64, 2})
+	Ti = zeros(4, 4)
+	Ti[1:3, 1:3] = Transpose(R(T))
+	Ti[1, 4] = -dot(R(T)[1:3, 1], p(T))
+	Ti[2, 4] = -dot(R(T)[1:3, 2], p(T))
+	Ti[3, 4] = -dot(R(T)[1:3, 3], p(T))
+	Ti[4, 4] = 1
+	return Ti
+end
 
 # ╔═╡ dee42ada-3f83-11eb-2c39-83a2b20d02c2
 transformationMatrix(xhat, π/2, [1, 2, 3])
@@ -166,10 +180,10 @@ adjoint(transformationMatrix(xhat, π/2, [1, 2, 3]))
 skew([1, 2, 3, 4, 5, 6])
 
 # ╔═╡ 353feda4-4d5a-11eb-27e8-11c2c259464f
-md"#### Robots"
+md"#### Kinematic chains"
 
 # ╔═╡ 3d9ecce0-4d5a-11eb-3da1-d9d48a6b15fa
-struct Robot
+struct KinematicChain
 	joints::Array{Array{Float64, 1}, 1}
 	axis::Array{Array{Float64, 1}, 1}
 	range::Float64
@@ -178,17 +192,20 @@ end
 # ╔═╡ 993f82e4-4d58-11eb-03c2-0181e03d5121
 md"3R robot as seen in the book p. 138."
 
+# ╔═╡ f66d4a82-5032-11eb-2f76-6b5532e0e96e
+function createRRR(L1::Float64, L2::Float64, L3::Float64)
+	return KinematicChain([L1*xhat, L2*xhat, L3*xhat], [yhat, yhat, yhat], L1+L2+L3)
+end
+
 # ╔═╡ a31ae364-4d5b-11eb-0c1b-4d52a89fd1e9
-RRR = Robot([xhat, xhat, xhat], [yhat, yhat, yhat], 3)
+RRR = createRRR(1.0, 1.0, 1.0)
 
 # ╔═╡ 0bd4a532-4d59-11eb-0834-2578f2865d9a
 md"KUKA LBR iiwa 7 d.o.f robot, as seen in task 4.1 and 5.1 in the exercise manual."
 
-# ╔═╡ 1c554a76-4d5c-11eb-3532-17486d770041
-begin
-	KUKA = Robot([[0.0]], [[0.0]], 1)
-	let L1 = 0.34, L2 = 0.4, L3 = 0.4, L4 = 0.15 
-		KUKA = Robot([
+# ╔═╡ cafc6880-5030-11eb-255c-d1877520159c
+function createKUKA(L1::Float64, L2::Float64, L3::Float64, L4::Float64)
+	return KinematicChain([
 			[0.0, 0.0, L1, 1.0],
 			[0.0, 0.0, 0.0, 1.0],
 			[0.0, 0.0, L2, 1.0],
@@ -205,9 +222,30 @@ begin
 			zhat,
 			xhat,
 			zhat
-		], 1.5)
-	end
+		], L1+L2+L3+L4)
 end
+
+# ╔═╡ 1c554a76-4d5c-11eb-3532-17486d770041
+KUKA = createKUKA(0.34, 0.4, 0.4, 0.15)
+
+# ╔═╡ 43180cb4-5033-11eb-245e-f30d3bea6bf7
+md"Classical Leg for quadruped robots. Not anatomically correct, they would need to have an additional elbow."
+
+# ╔═╡ 204eaeba-5031-11eb-26a5-2382a09e586b
+function createLeg(L1::Float64, L2::Float64, L3::Float64)
+	return KinematicChain([
+		-L1*yhat,
+		L2*xhat,
+		L3*xhat
+	], [
+		xhat,
+		yhat,
+		yhat
+	], L1+L2+L3)
+end
+
+# ╔═╡ ef492ae6-502f-11eb-1de3-c3fb07a6473e
+Leg = createLeg(1.0, 2.0, 2.0)
 
 # ╔═╡ 6545b464-4221-11eb-1dee-89c3d01e81de
 md"#### Denavit Hartenberg parameters (Ch. 3.3)"
@@ -246,10 +284,16 @@ md"#### Plotting"
 md"This function takes an array of transformation matrices `Ts` and plots a graph of the coordinate frames at each joint as well as the joints. This is set within the plot `limits`."
 
 # ╔═╡ c10c9d9a-4d56-11eb-1aa3-0d8bc76ea222
-md"This function takes arrays of `joints` represented in their reference frame, `axis` of rotation and parameters `θ` and plots a graph of the coordinate frames at each joint as well as the joints. This is set within the plot `limits`."
+md"This function takes a `KinematicChain` and parameters `θ` and plots a graph of the coordinate frames at each joint as well as the joints. You can provide offset parameters `θ0`."
 
 # ╔═╡ a3b36f62-4d56-11eb-39c9-6f20177d2cbe
-plotRobot(R::Robot, θ) = plotRobot(transformationsDH(R.joints, R.axis, θ), (-R.range, R.range))
+function plotKinematicChain(C::KinematicChain, θ, θ0=[])
+	if length(θ) == length(θ0)
+		plotKinematicChain(transformationsDH(C.joints, C.axis, θ - θ0), (-C.range, C.range))
+	else
+		plotKinematicChain(transformationsDH(C.joints, C.axis, θ), (-C.range, C.range))
+	end
+end
 
 # ╔═╡ 42de89f8-4d54-11eb-0d8e-ad63a5b4ed9c
 md"Displays the axis at a reference frame given by a transformation matrix `T`. Takes the parameter `plot` for the plot to draw in, this plot has to be actively displayed afterwards. Also takes the plot `limits` which dictate the length of the axis to make sure it is adequate."
@@ -281,7 +325,7 @@ function plotJoints(Ts::Array{Array{Float64, 2}, 1}, lims)
 end
 
 # ╔═╡ 7843cf14-4d4e-11eb-350d-0108281e1beb
-function plotRobot(Ts::Array{Array{Float64, 2}, 1}, limits)
+function plotKinematicChain(Ts::Array{Array{Float64, 2}, 1}, limits)
 	l = length(Ts)
 	p = plotJoints(Ts, limits)
 	for index = 1:l
@@ -317,41 +361,53 @@ begin
 	"""
 end
 
-# ╔═╡ 540b2a76-3f86-11eb-1426-c353435545d2
-plotRobot(RRR, [θ1, θ2, θ3])
+# ╔═╡ 7b0bb41e-5030-11eb-0848-8f1d4d618825
+plotKinematicChain(Leg, [θ1, θ2, θ3], [0, -π/2, 0])
 
 # ╔═╡ 0b02c060-4d5d-11eb-0b56-87148bf115ec
-plotRobot(KUKA, [θ1, θ2, θ3, θ4, θ5, θ6, θ7])
+plotKinematicChain(KUKA, [θ1, θ2, θ3, θ4, θ5, θ6, θ7])
+
+# ╔═╡ 521cda3c-5038-11eb-0195-a10ae1d48bb7
+md"`SampleWorkspace` is not yet a useful function and will only become of value when I add parameter constraints to `KinematicChain`."
 
 # ╔═╡ 8c201bbe-4489-11eb-3960-e34b74493aad
 md"#### Manipulator Jacobian (Ch. 5)"
 
-# ╔═╡ d2dcea70-4489-11eb-0aca-57d973131625
-begin
-	S::Array{Float64, 2} = [0.0 0.0; 0.0 0.0]
-	B::Array{Float64, 2} = [0.0 0.0; 0.0 0.0]
-	let L1 = 0.34, L2 = 0.4, L3 = 0.4, L4 = 0.15
-		S = Transpose([
-			0 0 1 0 0 0;
-			1 0 0 0 L1 0;
-			0 0 1 0 0 0;
-			1 0 0 0 L1+L2 0;
-			0 0 1 0 0 0;
-			1 0 0 0 L1+L2+L3 0;
-			0 0 1 0 0 0
-		])
+# ╔═╡ ba25c25c-5046-11eb-0295-211b28cfa6bd
+md"Compute the screw axis of the kinematic chain `C` in {s}."
 
-		B = Transpose([
-			0 0 1 0 0 0;
-			1 0 0 0 -L4-L3-L2 0;
-			0 0 1 0 0 0;
-			1 0 0 0 -L4-L3 0;
-			0 0 1 0 0 0;
-			1 0 0 0 -L4 0;
-			0 0 1 0 0 0
-		])
+# ╔═╡ d3b63ec0-503e-11eb-22d8-f1a05df4f77c
+function spaceScrews(C::KinematicChain)
+	n = length(C.joints)
+	Ts = transformationsDH(C.joints, C.axis, zeros(n))
+	S::Array{Float64, 2} = zeros(6, n)
+	for i = 1:length(Ts)-1
+		S[1:3, i] = C.axis[i][1:3]
+		S[4:6, i] = -cross(C.axis[i][1:3], p(Ts[i]))
 	end
+	return S
 end
+
+# ╔═╡ 47dd98b0-5040-11eb-137d-75f81ba9d5ef
+S = spaceScrews(KUKA)
+
+# ╔═╡ cefb0e44-5046-11eb-3374-03306bca801f
+md"Compute the screw axis of the kinematic chain `C` in {b}."
+
+# ╔═╡ 0fdb1638-5043-11eb-3310-553a9f5a1fa3
+function bodyScrews(C::KinematicChain)
+	n = length(C.joints)
+	Ts = transformationsDH(-reverse(C.joints), reverse(C.axis), zeros(n))
+	B::Array{Float64, 2} = zeros(6, n)
+	for i = 1:length(Ts)-1
+		B[1:3, i] = C.axis[n+1-i][1:3]
+		B[4:6, i] = -cross(C.axis[n+1-i][1:3], p(Ts[n+1-i]))
+	end
+	return B
+end
+
+# ╔═╡ 37d7c724-5045-11eb-0968-81136e215ac4
+B = bodyScrews(KUKA)
 
 # ╔═╡ acd33468-4489-11eb-1d06-17d278e4b389
 md"###### Space Jacobian from screws"
@@ -415,6 +471,28 @@ end
 # ╔═╡ f15b295a-4d5e-11eb-24a0-7944dd834bd6
 bodyJacobian(B, zeros(7))
 
+# ╔═╡ 23d111b2-5037-11eb-350b-b73d4cc44fa8
+md"#### Helpers"
+
+# ╔═╡ cd5503aa-5036-11eb-3181-63a0250e3375
+X(A::Array{Array{Float64, 1}, 1}) = [A[index][1] for index = 1:length(A)]
+
+# ╔═╡ ea2759bc-5036-11eb-2c4b-e31359c1693e
+Y(A::Array{Array{Float64, 1}, 1}) = [A[index][2] for index = 1:length(A)]
+
+# ╔═╡ eea933ac-5036-11eb-24a2-610f285850d4
+Z(A::Array{Array{Float64, 1}, 1}) = [A[index][3] for index = 1:length(A)]
+
+# ╔═╡ c6c9c060-5034-11eb-071a-1b6e1bd2c287
+function sampleWorkspace(C::KinematicChain, iterations::Int64)
+	points::Array{Array{Float64, 1}, 1} = []
+	for index = 1:iterations
+		θ = rand(-π:0.00001:π, length(C.joints))
+		push!(points, p(last(transformationsDH(C.joints, C.axis, θ))))
+	end
+	scatter(X(points), Y(points), Z(points), legend=false, color=:blue)
+end
+
 # ╔═╡ Cell order:
 # ╟─54276a22-3f80-11eb-2538-e18635928ecf
 # ╠═36844d82-3f80-11eb-244a-83efb39d115d
@@ -438,6 +516,8 @@ bodyJacobian(B, zeros(7))
 # ╠═152049ea-3f83-11eb-18dd-8d667de8625d
 # ╟─3abe0ebe-4d55-11eb-05f8-35ce4ffefd66
 # ╠═09009752-3f86-11eb-1e79-3f70a93d7575
+# ╟─cd531f2a-5044-11eb-132f-9d02777551c6
+# ╠═2388d716-5044-11eb-1ec5-b516fa176961
 # ╟─c2826700-4d55-11eb-19cf-7b814acfca64
 # ╠═0d673ae0-42ac-11eb-05ec-7798c0839217
 # ╟─cf770c18-4d55-11eb-362f-a138a8b6c353
@@ -454,9 +534,14 @@ bodyJacobian(B, zeros(7))
 # ╟─353feda4-4d5a-11eb-27e8-11c2c259464f
 # ╠═3d9ecce0-4d5a-11eb-3da1-d9d48a6b15fa
 # ╟─993f82e4-4d58-11eb-03c2-0181e03d5121
-# ╟─a31ae364-4d5b-11eb-0c1b-4d52a89fd1e9
+# ╠═f66d4a82-5032-11eb-2f76-6b5532e0e96e
+# ╠═a31ae364-4d5b-11eb-0c1b-4d52a89fd1e9
 # ╟─0bd4a532-4d59-11eb-0834-2578f2865d9a
-# ╟─1c554a76-4d5c-11eb-3532-17486d770041
+# ╟─cafc6880-5030-11eb-255c-d1877520159c
+# ╠═1c554a76-4d5c-11eb-3532-17486d770041
+# ╟─43180cb4-5033-11eb-245e-f30d3bea6bf7
+# ╟─204eaeba-5031-11eb-26a5-2382a09e586b
+# ╠═ef492ae6-502f-11eb-1de3-c3fb07a6473e
 # ╟─6545b464-4221-11eb-1dee-89c3d01e81de
 # ╟─6b1b4468-4d47-11eb-1492-e14006a0d20c
 # ╠═5545204a-4d45-11eb-305e-0fb7d2133421
@@ -470,11 +555,18 @@ bodyJacobian(B, zeros(7))
 # ╠═67f55590-3fa4-11eb-1904-5da71ba26e3a
 # ╟─8e4a9832-4d54-11eb-364b-f5df1ecebc55
 # ╠═135b0e0e-4d45-11eb-1870-87e23668d01b
-# ╠═540b2a76-3f86-11eb-1426-c353435545d2
+# ╠═7b0bb41e-5030-11eb-0848-8f1d4d618825
 # ╟─43f42af0-3f9e-11eb-202a-e7feee93095b
 # ╠═0b02c060-4d5d-11eb-0b56-87148bf115ec
+# ╟─521cda3c-5038-11eb-0195-a10ae1d48bb7
+# ╠═c6c9c060-5034-11eb-071a-1b6e1bd2c287
 # ╟─8c201bbe-4489-11eb-3960-e34b74493aad
-# ╠═d2dcea70-4489-11eb-0aca-57d973131625
+# ╟─ba25c25c-5046-11eb-0295-211b28cfa6bd
+# ╠═d3b63ec0-503e-11eb-22d8-f1a05df4f77c
+# ╠═47dd98b0-5040-11eb-137d-75f81ba9d5ef
+# ╟─cefb0e44-5046-11eb-3374-03306bca801f
+# ╠═0fdb1638-5043-11eb-3310-553a9f5a1fa3
+# ╠═37d7c724-5045-11eb-0968-81136e215ac4
 # ╟─acd33468-4489-11eb-1d06-17d278e4b389
 # ╟─5f1f14da-4d53-11eb-25d6-3b5fcf15b3aa
 # ╠═95052d82-4489-11eb-0406-a9efde904d63
@@ -487,3 +579,7 @@ bodyJacobian(B, zeros(7))
 # ╟─172cc686-4d60-11eb-2799-ad1fc4a2712c
 # ╠═e5e0f806-4d41-11eb-3d5a-075ebee9ab8b
 # ╠═f15b295a-4d5e-11eb-24a0-7944dd834bd6
+# ╟─23d111b2-5037-11eb-350b-b73d4cc44fa8
+# ╠═cd5503aa-5036-11eb-3181-63a0250e3375
+# ╠═ea2759bc-5036-11eb-2c4b-e31359c1693e
+# ╠═eea933ac-5036-11eb-24a2-610f285850d4
