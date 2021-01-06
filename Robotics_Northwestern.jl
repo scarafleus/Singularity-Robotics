@@ -373,38 +373,50 @@ md"`SampleWorkspace` is not yet a useful function and will only become of value 
 # ╔═╡ 8c201bbe-4489-11eb-3960-e34b74493aad
 md"#### Manipulator Jacobian (Ch. 5)"
 
-# ╔═╡ ba25c25c-5046-11eb-0295-211b28cfa6bd
-md"Compute the screw axis of the kinematic chain `C` in {s}."
+# ╔═╡ 7c6b3a98-504e-11eb-204b-4f5f056e24d1
+md"Compute the screw axis of the `joints` and `axis` in {s}."
 
 # ╔═╡ d3b63ec0-503e-11eb-22d8-f1a05df4f77c
-function spaceScrews(C::KinematicChain)
-	n = length(C.joints)
-	Ts = transformationsDH(C.joints, C.axis, zeros(n))
+function spaceScrews(joints::Array{Array{Float64, 1}, 1}, axis::Array{Array{Float64, 1}, 1})
+	n = length(joints)
+	Ts = transformationsDH(joints, axis, zeros(n))
 	S::Array{Float64, 2} = zeros(6, n)
 	for i = 1:length(Ts)-1
-		S[1:3, i] = C.axis[i][1:3]
-		S[4:6, i] = -cross(C.axis[i][1:3], p(Ts[i]))
+		S[1:3, i] = axis[i][1:3]
+		S[4:6, i] = -cross(axis[i][1:3], p(Ts[i]))
 	end
 	return S
 end
 
+# ╔═╡ ba25c25c-5046-11eb-0295-211b28cfa6bd
+md"Compute the screw axis of the kinematic chain `C` in {s}."
+
+# ╔═╡ d4c3f28a-504d-11eb-361a-0f2711ee041c
+spaceScrews(C::KinematicChain) = spaceScrews(C.joints, C.axis)
+
 # ╔═╡ 47dd98b0-5040-11eb-137d-75f81ba9d5ef
 S = spaceScrews(KUKA)
+
+# ╔═╡ 83589a9e-504e-11eb-2299-f56fe3b02cc9
+md"Compute the screw axis of the `joints` and `axis` in {b}."
+
+# ╔═╡ 0fdb1638-5043-11eb-3310-553a9f5a1fa3
+function bodyScrews(joints::Array{Array{Float64, 1}, 1}, axis::Array{Array{Float64, 1}, 1})
+	n = length(joints)
+	Ts = transformationsDH(-reverse(joints), reverse(axis), zeros(n))
+	B::Array{Float64, 2} = zeros(6, n)
+	for i = 1:length(Ts)-1
+		B[1:3, i] = axis[n+1-i][1:3]
+		B[4:6, i] = -cross(axis[n+1-i][1:3], p(Ts[n+1-i]))
+	end
+	return B
+end
 
 # ╔═╡ cefb0e44-5046-11eb-3374-03306bca801f
 md"Compute the screw axis of the kinematic chain `C` in {b}."
 
-# ╔═╡ 0fdb1638-5043-11eb-3310-553a9f5a1fa3
-function bodyScrews(C::KinematicChain)
-	n = length(C.joints)
-	Ts = transformationsDH(-reverse(C.joints), reverse(C.axis), zeros(n))
-	B::Array{Float64, 2} = zeros(6, n)
-	for i = 1:length(Ts)-1
-		B[1:3, i] = C.axis[n+1-i][1:3]
-		B[4:6, i] = -cross(C.axis[n+1-i][1:3], p(Ts[n+1-i]))
-	end
-	return B
-end
+# ╔═╡ 052f1b66-504e-11eb-0fa2-adc02bb76120
+bodyScrews(C::KinematicChain) = bodyScrews(C.joints, C.axis)
 
 # ╔═╡ 37d7c724-5045-11eb-0968-81136e215ac4
 B = bodyScrews(KUKA)
@@ -534,7 +546,7 @@ end
 # ╟─353feda4-4d5a-11eb-27e8-11c2c259464f
 # ╠═3d9ecce0-4d5a-11eb-3da1-d9d48a6b15fa
 # ╟─993f82e4-4d58-11eb-03c2-0181e03d5121
-# ╠═f66d4a82-5032-11eb-2f76-6b5532e0e96e
+# ╟─f66d4a82-5032-11eb-2f76-6b5532e0e96e
 # ╠═a31ae364-4d5b-11eb-0c1b-4d52a89fd1e9
 # ╟─0bd4a532-4d59-11eb-0834-2578f2865d9a
 # ╟─cafc6880-5030-11eb-255c-d1877520159c
@@ -561,11 +573,15 @@ end
 # ╟─521cda3c-5038-11eb-0195-a10ae1d48bb7
 # ╠═c6c9c060-5034-11eb-071a-1b6e1bd2c287
 # ╟─8c201bbe-4489-11eb-3960-e34b74493aad
-# ╟─ba25c25c-5046-11eb-0295-211b28cfa6bd
+# ╟─7c6b3a98-504e-11eb-204b-4f5f056e24d1
 # ╠═d3b63ec0-503e-11eb-22d8-f1a05df4f77c
+# ╟─ba25c25c-5046-11eb-0295-211b28cfa6bd
+# ╠═d4c3f28a-504d-11eb-361a-0f2711ee041c
 # ╠═47dd98b0-5040-11eb-137d-75f81ba9d5ef
-# ╟─cefb0e44-5046-11eb-3374-03306bca801f
+# ╟─83589a9e-504e-11eb-2299-f56fe3b02cc9
 # ╠═0fdb1638-5043-11eb-3310-553a9f5a1fa3
+# ╟─cefb0e44-5046-11eb-3374-03306bca801f
+# ╠═052f1b66-504e-11eb-0fa2-adc02bb76120
 # ╠═37d7c724-5045-11eb-0968-81136e215ac4
 # ╟─acd33468-4489-11eb-1d06-17d278e4b389
 # ╟─5f1f14da-4d53-11eb-25d6-3b5fcf15b3aa
